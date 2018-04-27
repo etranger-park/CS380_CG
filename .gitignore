@@ -27,10 +27,5 @@
 *.out
 *.app
 
-# db
-*.db
-*.pdb
-*.opendb
-
 # some directory
 /Debug/*

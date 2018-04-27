@@ -29,7 +29,11 @@
 #include "geometrymaker.h"
 #include "ppm.h"
 #include "glsupport.h"
-
+//lab5
+#include "asstcommon.h"
+#include "scenegraph.h"
+#include "drawer.h"
+#include "picker.h"
 using namespace std;      // for string, vector, iostream, and other standard C++ stuff
 using namespace tr1; // for shared_ptr
 
@@ -50,7 +54,7 @@ using namespace tr1; // for shared_ptr
 // To complete the assignment you only need to edit the shader files that get
 // loaded
 // ----------------------------------------------------------------------------
-static const bool g_Gl2Compatible = false;
+const bool g_Gl2Compatible = false;
 
 
 static const float g_frustMinFov = 60.0;  // A minimal of 60 degree field of view
@@ -77,52 +81,17 @@ static double g_arcballSDcreenRadius = 0.25*min(g_windowWidth, g_windowHeight);
 static double g_arcballScale = 0;
 static bool g_arcball_act = true; // when arcball is active in view
 
-struct ShaderState {
-	GlProgram program;
-
-	// Handles to uniform variables
-	GLint h_uLight, h_uLight2;
-	GLint h_uProjMatrix;
-	GLint h_uModelViewMatrix;
-	GLint h_uNormalMatrix;
-	GLint h_uColor;
-
-	// Handles to vertex attributes
-	GLint h_aPosition;
-	GLint h_aNormal;
-
-	ShaderState(const char* vsfn, const char* fsfn) {
-		readAndCompileShader(program, vsfn, fsfn);
-
-		const GLuint h = program; // short hand
-
-		// Retrieve handles to uniform variables
-		h_uLight = safe_glGetUniformLocation(h, "uLight");
-		h_uLight2 = safe_glGetUniformLocation(h, "uLight2");
-		h_uProjMatrix = safe_glGetUniformLocation(h, "uProjMatrix");
-		h_uModelViewMatrix = safe_glGetUniformLocation(h, "uModelViewMatrix");
-		h_uNormalMatrix = safe_glGetUniformLocation(h, "uNormalMatrix");
-		h_uColor = safe_glGetUniformLocation(h, "uColor");
-
-		// Retrieve handles to vertex attributes
-		h_aPosition = safe_glGetAttribLocation(h, "aPosition");
-		h_aNormal = safe_glGetAttribLocation(h, "aNormal");
-
-		if (!g_Gl2Compatible)
-			glBindFragDataLocation(h, 0, "fragColor");
-		checkGlErrors();
-	}
-
-};
-
-static const int g_numShaders = 2;
+static const int PICKING_SHADER = 2; // index of the picking shader is g_shaerFiles
+static const int g_numShaders = 3; // 3 shaders instead of 2
 static const char * const g_shaderFiles[g_numShaders][2] = {
   {"./shaders/basic-gl3.vshader", "./shaders/diffuse-gl3.fshader"},
-  {"./shaders/basic-gl3.vshader", "./shaders/solid-gl3.fshader"}
+  {"./shaders/basic-gl3.vshader", "./shaders/solid-gl3.fshader"},
+  { "./shaders/basic-gl3.vshader", "./shaders/pick-gl3.fshader" }
 };
 static const char * const g_shaderFilesGl2[g_numShaders][2] = {
   {"./shaders/basic-gl2.vshader", "./shaders/diffuse-gl2.fshader"},
-  {"./shaders/basic-gl2.vshader", "./shaders/solid-gl2.fshader"}
+  {"./shaders/basic-gl2.vshader", "./shaders/solid-gl2.fshader"},
+  { "./shaders/basic-gl2.vshader", "./shaders/pick-gl2.fshader" }
 };
 static vector<shared_ptr<ShaderState> > g_shaderStates; // our global shader states
 
@@ -192,6 +161,8 @@ struct Geometry {
 	}
 };
 
+typedef SgGeometryShapeNode<Geometry> MyShapeNode;
+
 
 // Vertex buffer and index buffer associated with the ground, cube and sphere geometry
 static shared_ptr<Geometry> g_ground, g_cube, g_sphere;
@@ -199,10 +170,13 @@ static shared_ptr<Geometry> g_ground, g_cube, g_sphere;
 // --------- Scene
 
 static const Cvec3 g_light1(2.0, 3.0, 14.0), g_light2(-2, -3.0, -5.0);  // define two lights positions in world space
-static RigTForm g_skyRbt = RigTForm(Cvec3(0.0, 0.25, 4.0));
 static RigTForm g_objectRbt[2] = { RigTForm(Cvec3(-1,0,0)), RigTForm(Cvec3(1,0,0)) };  // 
 static RigTForm g_sphereRbt = RigTForm(Cvec3(0.0, 0.0,0.0));
 static Cvec3f g_objectColors[2] = { Cvec3f(1, 0, 0), Cvec3f(1, 1, 1) };
+
+static shared_ptr<SgRootNode> g_world;
+static shared_ptr<SgRbtNode> g_skyNode, g_groundNode, g_robot1Node, g_robot2Node;
+static shared_ptr<SgRbtNode> g_currentPickedRbtNode; // used later when you do picking
 ///////////////// END OF G L O B A L S //////////////////////////////////////////////////
 
 
@@ -274,16 +248,6 @@ static void sendProjectionMatrix(const ShaderState& curSS, const Matrix4& projMa
 	GLfloat glmatrix[16];
 	projMatrix.writeToColumnMajorMatrix(glmatrix); // send projection matrix
 	safe_glUniformMatrix4fv(curSS.h_uProjMatrix, glmatrix);
-}
-
-// takes MVM and its normal matrix to the shaders
-static void sendModelViewNormalMatrix(const ShaderState& curSS, const Matrix4& MVM, const Matrix4& NMVM) {
-	GLfloat glmatrix[16];
-	MVM.writeToColumnMajorMatrix(glmatrix); // send MVM
-	safe_glUniformMatrix4fv(curSS.h_uModelViewMatrix, glmatrix);
-
-	NMVM.writeToColumnMajorMatrix(glmatrix); // send NMVM
-	safe_glUniformMatrix4fv(curSS.h_uNormalMatrix, glmatrix);
 }
 
 // update g_frustFovY from g_frustMinFov, g_windowWidth, and g_windowHeight
