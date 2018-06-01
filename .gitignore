@@ -28,4 +28,10 @@
 *.app
 
 # some directory
-/Debug/*
+*.db
+*.opendb
+./.vs/*
+
+\.vs/asst4/v14/\.suo
+
+Debug/

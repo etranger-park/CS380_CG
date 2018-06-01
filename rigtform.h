@@ -105,4 +105,13 @@ inline RigTForm makeMixedFrame(const RigTForm &objRbt, const RigTForm &eyeRbt) {
 	//return RigTForm(objRbt.getTranslation(), eyeRbt.getRotation());
 	return transFact(objRbt) * linFact(eyeRbt);
 }
+
+inline void printRigitForm(const RigTForm &rbt) {
+	//print rigtForm
+	Cvec3 t = rbt.getTranslation();
+	Quat r = rbt.getRotation();
+	std::cout << "translation " << t(0) << " " << t(1) << " " << t(2);
+	std::cout << " rotation " << r(0) << " " << r(1) << " " << r(2)<<" "<<r(3)<<std::endl;
+}
+
 #endif
