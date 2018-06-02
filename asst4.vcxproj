@@ -118,6 +118,7 @@
     <ClInclude Include="hexdump.h" />
     <ClInclude Include="material.h" />
     <ClInclude Include="matrix4.h" />
+    <ClInclude Include="mesh.h" />
     <ClInclude Include="picker.h" />
     <ClInclude Include="ppm.h" />
     <ClInclude Include="quat.h" />
@@ -134,9 +135,12 @@
     <None Include=".gitattributes" />
     <None Include=".gitignore" />
     <None Include="AUTHORS" />
+    <None Include="cube.mesh" />
     <None Include="Fieldstone.ppm" />
     <None Include="FieldstoneNormal.ppm" />
     <None Include="LICENSE" />
+    <None Include="Makefile" />
+    <None Include="mesh.interface" />
     <None Include="shaders\basic-gl2.vshader" />
     <None Include="shaders\basic-gl3.vshader" />
     <None Include="shaders\diffuse-gl2.fshader" />

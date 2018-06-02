@@ -46,6 +46,8 @@
 #include "uniforms.h"
 #include "texture.h"
 #include "material.h"
+//lab8
+#include "mesh.h"
 
 using namespace std;      // for string, vector, iostream, and other standard C++ stuff
 using namespace tr1; // for shared_ptr
@@ -102,6 +104,8 @@ static bool g_animation = false;
 static const char *filename = "keyFrames_suho.txt";
 //lab 7
 static shared_ptr<Material> g_redDiffuseMat, g_blueDiffuseMat, g_bumpFloorMat, g_arcballMat, g_pickingMat, g_lightMat;
+//lab 8
+static const char *meshFile = "cube.mesh";
 
 shared_ptr<Material> g_overridingMaterial;
 
@@ -167,6 +171,25 @@ static void makeScaledSphere(double scale) {
 	makeSphere(scale, 20, 10, vtx.begin(), idx.begin());
 
 	g_sphere.reset(new SimpleIndexedGeometryPNTBX(&vtx[0], &idx[0], vtx.size(), idx.size()));
+}
+
+//lab8 Load Mesh File using load
+static void initMesh() {
+	Mesh mesh;
+	mesh.load(meshFile);
+	int numFace = mesh.getNumFaces;
+	vector<VertexPN> vtx;
+	for (int i = 0; i < numFace; i++) {
+		Mesh::Face tmpFace = mesh.getFace(i);
+		for (int j = 0; j <= tmpFace.getNumVertices() - 3; j++) {
+			Cvec3 position = tmpFace.getVertex(j).getPosition();
+			Cvec3 normal = tmpFace.getVertex(j).getNormal();
+			VertexPN tmpPN = VertexPN(position[0], position[1], position[2],normal[0], normal[1], normal[2]);
+			vtx.push_back(tmpPN);
+		}
+	}
+	
+
 }
 
 

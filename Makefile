@@ -1,4 +1,4 @@
-BASE = asst6_5
+BASE = asst7
 
 all: $(BASE)
 
