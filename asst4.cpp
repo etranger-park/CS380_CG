@@ -104,8 +104,9 @@ static bool g_animation = false;
 static const char *filename = "keyFrames_suho.txt";
 //lab 7
 static shared_ptr<Material> g_redDiffuseMat, g_blueDiffuseMat, g_bumpFloorMat, g_arcballMat, g_pickingMat, g_lightMat;
-//lab 8
+//lab 9
 static const char *meshFile = "cube.mesh";
+static shared_ptr<Material> g_meshMat;
 
 shared_ptr<Material> g_overridingMaterial;
 
@@ -123,6 +124,9 @@ static shared_ptr<SgRbtNode> g_skyNode, g_groundNode, g_robot1Node, g_robot2Node
 static shared_ptr<SgRbtNode> g_currentPickedRbtNode; // used later when you do picking
 //lab 7
 static shared_ptr<SgRbtNode> g_light1Node, g_light2Node;
+//lab 9
+static shared_ptr<SgRbtNode> g_meshNode;
+static shared_ptr<Geometry> g_mesh;
 ///////////////// END OF G L O B A L S //////////////////////////////////////////////////
 
 //lab 7
@@ -177,19 +181,24 @@ static void makeScaledSphere(double scale) {
 static void initMesh() {
 	Mesh mesh;
 	mesh.load(meshFile);
-	int numFace = mesh.getNumFaces;
+	int numFace = mesh.getNumFaces();
 	vector<VertexPN> vtx;
 	for (int i = 0; i < numFace; i++) {
 		Mesh::Face tmpFace = mesh.getFace(i);
-		for (int j = 0; j <= tmpFace.getNumVertices() - 3; j++) {
-			Cvec3 position = tmpFace.getVertex(j).getPosition();
-			Cvec3 normal = tmpFace.getVertex(j).getNormal();
-			VertexPN tmpPN = VertexPN(position[0], position[1], position[2],normal[0], normal[1], normal[2]);
-			vtx.push_back(tmpPN);
+		Cvec3 normal = tmpFace.getNormal();
+		const int numV = tmpFace.getNumVertices();
+		for (int j = 0; j < numV; j=j+2) {
+			//Seperate face by triangle
+			for (int k = 0; k < 3; k++) {
+				//make triangle
+				Mesh::Vertex tmpVertex = tmpFace.getVertex((j + k)%numV);
+				Cvec3 position = tmpVertex.getPosition();
+				VertexPN tmpPN = VertexPN(position[0], position[1], position[2], normal[0], normal[1], normal[2]);
+				vtx.push_back(tmpPN);
+			}
 		}
 	}
-	
-
+	g_mesh.reset(new SimpleGeometryPN(&vtx[0], vtx.size()));
 }
 
 
@@ -1006,6 +1015,7 @@ static void initMaterials() {
 	// Create some prototype materials
 	Material diffuse("./shaders/basic-gl3.vshader", "./shaders/diffuse-gl3.fshader");
 	Material solid("./shaders/basic-gl3.vshader", "./shaders/solid-gl3.fshader");
+	Material specular("./shaders/basic-gl3.vshader", "./shaders/specular-gl3.fshader");
 
 	// copy diffuse prototype and set red color
 	g_redDiffuseMat.reset(new Material(diffuse));
@@ -1029,6 +1039,10 @@ static void initMaterials() {
 	g_lightMat.reset(new Material(solid));
 	g_lightMat->getUniforms().put("uColor", Cvec3f(1, 1, 1));
 
+	// copy specular prototype and set green color
+	g_meshMat.reset(new Material(specular));
+	g_meshMat->getUniforms().put("uColor", Cvec3f(0, 1, 0));
+
 	// pick shader
 	g_pickingMat.reset(new Material("./shaders/basic-gl3.vshader", "./shaders/pick-gl3.fshader"));
 };
@@ -1037,6 +1051,7 @@ static void initGeometry() {
 	initGround();
 	initCubes();
 	initSphere();
+	initMesh();
 }
 
 static void constructRobot(shared_ptr<SgTransformNode> base, shared_ptr<Material> material){
@@ -1129,6 +1144,24 @@ static void constructLight(shared_ptr<SgTransformNode> base) {
 	jointNode->addChild(shape);
 }
 
+static void constructMesh() {
+	shared_ptr<SgTransformNode> jointNode = g_meshNode;
+	struct ShapeDesc {
+		float x, y, z, sx, sy, sz;
+		shared_ptr<Geometry> geometry;
+	};
+
+	const double edgeLen = 1;
+	ShapeDesc shapeDesc = { 0, 0, 0,edgeLen , edgeLen , edgeLen, g_mesh }; // Mesh
+	shared_ptr<SgGeometryShapeNode> shape(
+		new MyShapeNode(shapeDesc.geometry,
+			g_meshMat, // USE MATERIAL as opposed to color
+			Cvec3(shapeDesc.x, shapeDesc.y, shapeDesc.z),
+			Cvec3(0, 0, 0),
+			Cvec3(shapeDesc.sx, shapeDesc.sy, shapeDesc.sz)));
+	jointNode->addChild(shape);
+}
+
 static void initScene() {
 	g_world.reset(new SgRootNode());//make g_world
 
@@ -1152,12 +1185,16 @@ static void initScene() {
 	constructLight(g_light1Node);
 	constructLight(g_light2Node);
 
+	g_meshNode.reset(new SgRbtNode(RigTForm(Cvec3(0, 0, 0))));
+	constructMesh();
+
 	g_world->addChild(g_skyNode);
 	g_world->addChild(g_groundNode);
 	g_world->addChild(g_robot1Node);
 	g_world->addChild(g_robot2Node);
 	g_world->addChild(g_light1Node);
 	g_world->addChild(g_light2Node);
+	g_world->addChild(g_meshNode);
 }
 
 
