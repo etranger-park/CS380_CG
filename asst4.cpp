@@ -48,6 +48,7 @@
 #include "material.h"
 //lab8
 #include "mesh.h"
+#define PI 3.14159265
 
 using namespace std;      // for string, vector, iostream, and other standard C++ stuff
 using namespace tr1; // for shared_ptr
@@ -108,6 +109,8 @@ static shared_ptr<Material> g_redDiffuseMat, g_blueDiffuseMat, g_bumpFloorMat, g
 static const char *meshFile = "cube.mesh";
 static shared_ptr<Material> g_meshMat;
 static Mesh mesh;
+static int g_msPeriod = 4000; // mesh animation period 2seconds
+static int g_meshFramesPerSecond = 30; // framse to render per period during animate
 //
 shared_ptr<Material> g_overridingMaterial;
 
@@ -127,7 +130,7 @@ static shared_ptr<SgRbtNode> g_currentPickedRbtNode; // used later when you do p
 static shared_ptr<SgRbtNode> g_light1Node, g_light2Node;
 //lab 9
 static shared_ptr<SgRbtNode> g_meshNode;
-static shared_ptr<Geometry> g_mesh;
+static shared_ptr<SimpleGeometryPN> g_mesh;
 
 
 ///////////////// END OF G L O B A L S //////////////////////////////////////////////////
@@ -182,9 +185,9 @@ static void makeScaledSphere(double scale) {
 
 //lab9
 //Set the vertex normal by smooth shadinf. no return value, change the mesh value.
-static void smoothShading() {
-	for (int i = 0; i < mesh.getNumVertices(); i++) {
-		const Mesh::Vertex v = mesh.getVertex(i);
+static void smoothShading(Mesh *mesh_) {
+	for (int i = 0; i < mesh_->getNumVertices(); i++) {
+		const Mesh::Vertex v = mesh_->getVertex(i);
 		Mesh::VertexIterator it(v.getIterator()), it0(it);
 		v.setNormal(Cvec3(0, 0, 0));//initialize
 		Cvec3 average = Cvec3(0, 0, 0);
@@ -202,30 +205,61 @@ static void smoothShading() {
 	}
 }
 
-//Load Mesh File using load
-static void initMesh() {
-	mesh.load(meshFile);
-	const int numFace = mesh.getNumFaces();
-	vector<VertexPN> vtx;
-	smoothShading();
-
+static void makeMeshVertexPN(Mesh mesh_, vector<VertexPN> *vtx_) {
+	const int numFace = mesh_.getNumFaces();
 	for (int i = 0; i < numFace; i++) {
-		Mesh::Face tmpFace = mesh.getFace(i);
+		Mesh::Face tmpFace = mesh_.getFace(i);
 		const int numV = tmpFace.getNumVertices();
-		for (int j = 0; j < numV; j=j+2) {
+		for (int j = 0; j < numV; j = j + 2) {
 			//Seperate face by triangle
 			for (int k = 0; k < 3; k++) {
 				//make triangle
-				Mesh::Vertex tmpVertex = tmpFace.getVertex((j + k)%numV);
+				Mesh::Vertex tmpVertex = tmpFace.getVertex((j + k) % numV);
 				Cvec3 position = tmpVertex.getPosition();
+				//cout << i << ": " << position[0] << " " << position[1] << " " << position[2] << " " << endl;
 				Cvec3 normal = tmpVertex.getNormal();
 				VertexPN tmpPN = VertexPN(position, normal);
-				vtx.push_back(tmpPN);
+				vtx_->push_back(tmpPN);
 			}
 		}
 	}
-	g_mesh.reset(new SimpleGeometryPN(&vtx[0], vtx.size()));
 }
+
+// Interpret "ms" as milliseconds, Make Mesh Animation
+//Copy the mesh Class and scaled it, display
+static void meshTimerCallback(int ms) {
+	float t = (float)ms / (float)g_msPeriod * 2 * PI;
+	double meshScale = sin(t);
+	Mesh scaledMesh = Mesh(mesh);
+	const int scaleWeight[10] = { 7, 2, 5, 6, 8, 1, 3, 10 , 15 , 20 };
+
+	for (int i = 0; i < scaledMesh.getNumVertices(); i++) {
+		const Mesh::Vertex v = scaledMesh.getVertex(i);
+		Cvec3 scaledPosition = v.getPosition();
+		scaledPosition *= (meshScale*(scaleWeight[i]) / 8.0 + 0.5);
+		//cout <<i <<": "<< scaledPosition[0] << " " << scaledPosition[1] << " " << scaledPosition[2] << " " << endl;
+		v.setPosition(scaledPosition);
+	}
+	smoothShading(&scaledMesh);
+	vector<VertexPN> vtx;
+	makeMeshVertexPN(scaledMesh, &vtx);
+	g_mesh->upload(&vtx[0], vtx.size());
+	glutPostRedisplay();
+	glutTimerFunc(1000 / g_meshFramesPerSecond,
+		meshTimerCallback,
+		ms + 1000 / g_meshFramesPerSecond);
+}
+
+//Load Mesh File using load
+static void initMesh() {
+	mesh.load(meshFile);
+	smoothShading(&mesh);
+	vector<VertexPN> vtx;
+	makeMeshVertexPN(mesh, &vtx);
+	g_mesh.reset(new SimpleGeometryPN(&vtx[0], vtx.size()));
+	glutTimerFunc(0, meshTimerCallback, 0);
+}
+//lab 9 done
 
 // takes a projection matrix and send to the the shaders after lab7
 inline void sendProjectionMatrix(Uniforms& uniforms, const Matrix4& projMatrix) {
