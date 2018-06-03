@@ -107,7 +107,8 @@ static shared_ptr<Material> g_redDiffuseMat, g_blueDiffuseMat, g_bumpFloorMat, g
 //lab 9
 static const char *meshFile = "cube.mesh";
 static shared_ptr<Material> g_meshMat;
-
+static Mesh mesh;
+//
 shared_ptr<Material> g_overridingMaterial;
 
 // --------- Geometry
@@ -127,6 +128,8 @@ static shared_ptr<SgRbtNode> g_light1Node, g_light2Node;
 //lab 9
 static shared_ptr<SgRbtNode> g_meshNode;
 static shared_ptr<Geometry> g_mesh;
+
+
 ///////////////// END OF G L O B A L S //////////////////////////////////////////////////
 
 //lab 7
@@ -177,15 +180,37 @@ static void makeScaledSphere(double scale) {
 	g_sphere.reset(new SimpleIndexedGeometryPNTBX(&vtx[0], &idx[0], vtx.size(), idx.size()));
 }
 
-//lab8 Load Mesh File using load
+//lab9
+//Set the vertex normal by smooth shadinf. no return value, change the mesh value.
+static void smoothShading() {
+	for (int i = 0; i < mesh.getNumVertices(); i++) {
+		const Mesh::Vertex v = mesh.getVertex(i);
+		Mesh::VertexIterator it(v.getIterator()), it0(it);
+		v.setNormal(Cvec3(0, 0, 0));//initialize
+		Cvec3 average = Cvec3(0, 0, 0);
+		float count = 0;
+		do {
+			count++;
+			Mesh::Face tmpF = it.getFace();
+			average += tmpF.getNormal();
+		} while (++it != it0);
+
+		if (count != 0) {
+			average = average / count;
+		}
+		v.setNormal(average);
+	}
+}
+
+//Load Mesh File using load
 static void initMesh() {
-	Mesh mesh;
 	mesh.load(meshFile);
-	int numFace = mesh.getNumFaces();
+	const int numFace = mesh.getNumFaces();
 	vector<VertexPN> vtx;
+	smoothShading();
+
 	for (int i = 0; i < numFace; i++) {
 		Mesh::Face tmpFace = mesh.getFace(i);
-		Cvec3 normal = tmpFace.getNormal();
 		const int numV = tmpFace.getNumVertices();
 		for (int j = 0; j < numV; j=j+2) {
 			//Seperate face by triangle
@@ -193,14 +218,14 @@ static void initMesh() {
 				//make triangle
 				Mesh::Vertex tmpVertex = tmpFace.getVertex((j + k)%numV);
 				Cvec3 position = tmpVertex.getPosition();
-				VertexPN tmpPN = VertexPN(position[0], position[1], position[2], normal[0], normal[1], normal[2]);
+				Cvec3 normal = tmpVertex.getNormal();
+				VertexPN tmpPN = VertexPN(position, normal);
 				vtx.push_back(tmpPN);
 			}
 		}
 	}
 	g_mesh.reset(new SimpleGeometryPN(&vtx[0], vtx.size()));
 }
-
 
 // takes a projection matrix and send to the the shaders after lab7
 inline void sendProjectionMatrix(Uniforms& uniforms, const Matrix4& projMatrix) {
