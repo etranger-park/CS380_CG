@@ -131,6 +131,7 @@ static shared_ptr<SgRbtNode> g_light1Node, g_light2Node;
 //lab 9
 static shared_ptr<SgRbtNode> g_meshNode;
 static shared_ptr<SimpleGeometryPN> g_mesh;
+static bool g_smooth = true;
 
 
 ///////////////// END OF G L O B A L S //////////////////////////////////////////////////
@@ -205,7 +206,7 @@ static void smoothShading(Mesh *mesh_) {
 	}
 }
 
-static void makeMeshVertexPN(Mesh mesh_, vector<VertexPN> *vtx_) {
+static void makeMeshVertexPN(Mesh mesh_, vector<VertexPN> *vtx_, bool isSmooth) {
 	const int numFace = mesh_.getNumFaces();
 	for (int i = 0; i < numFace; i++) {
 		Mesh::Face tmpFace = mesh_.getFace(i);
@@ -217,7 +218,7 @@ static void makeMeshVertexPN(Mesh mesh_, vector<VertexPN> *vtx_) {
 				Mesh::Vertex tmpVertex = tmpFace.getVertex((j + k) % numV);
 				Cvec3 position = tmpVertex.getPosition();
 				//cout << i << ": " << position[0] << " " << position[1] << " " << position[2] << " " << endl;
-				Cvec3 normal = tmpVertex.getNormal();
+				Cvec3 normal = isSmooth ? tmpVertex.getNormal():tmpFace.getNormal();
 				VertexPN tmpPN = VertexPN(position, normal);
 				vtx_->push_back(tmpPN);
 			}
@@ -231,18 +232,18 @@ static void meshTimerCallback(int ms) {
 	float t = (float)ms / (float)g_msPeriod * 2 * PI;
 	double meshScale = sin(t);
 	Mesh scaledMesh = Mesh(mesh);
-	const int scaleWeight[10] = { 7, 2, 5, 6, 8, 1, 3, 10 , 15 , 20 };
-
+	const bool isSmooth = g_smooth;
 	for (int i = 0; i < scaledMesh.getNumVertices(); i++) {
 		const Mesh::Vertex v = scaledMesh.getVertex(i);
 		Cvec3 scaledPosition = v.getPosition();
-		scaledPosition *= (meshScale*(scaleWeight[i]) / 8.0 + 0.5);
+		scaledPosition *= (meshScale*abs(sin(i)*10) / 8.0 + 0.5);
 		//cout <<i <<": "<< scaledPosition[0] << " " << scaledPosition[1] << " " << scaledPosition[2] << " " << endl;
 		v.setPosition(scaledPosition);
 	}
-	smoothShading(&scaledMesh);
+	if(isSmooth)
+		smoothShading(&scaledMesh);
 	vector<VertexPN> vtx;
-	makeMeshVertexPN(scaledMesh, &vtx);
+	makeMeshVertexPN(scaledMesh, &vtx,isSmooth);
 	g_mesh->upload(&vtx[0], vtx.size());
 	glutPostRedisplay();
 	glutTimerFunc(1000 / g_meshFramesPerSecond,
@@ -253,9 +254,11 @@ static void meshTimerCallback(int ms) {
 //Load Mesh File using load
 static void initMesh() {
 	mesh.load(meshFile);
-	smoothShading(&mesh);
+	const bool isSmooth = g_smooth;
+	if(isSmooth)
+		smoothShading(&mesh);
 	vector<VertexPN> vtx;
-	makeMeshVertexPN(mesh, &vtx);
+	makeMeshVertexPN(mesh, &vtx,isSmooth);
 	g_mesh.reset(new SimpleGeometryPN(&vtx[0], vtx.size()));
 	glutTimerFunc(0, meshTimerCallback, 0);
 }
@@ -1038,6 +1041,9 @@ static void keyboard(const unsigned char key, const int x, const int y) {
 		}
 		write_core();
 		printf("output current key frames to output file\n");
+		break;
+	case 'f':
+		g_smooth = !g_smooth;
 	}
 	
 	glutPostRedisplay();
