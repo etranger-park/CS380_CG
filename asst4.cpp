@@ -109,8 +109,11 @@ static shared_ptr<Material> g_redDiffuseMat, g_blueDiffuseMat, g_bumpFloorMat, g
 static const char *meshFile = "cube.mesh";
 static shared_ptr<Material> g_meshMat;
 static Mesh mesh;
-static int g_msPeriod = 4000; // mesh animation period 2seconds
+static float g_msPeriod = 4000.0; // mesh animation period 2seconds
 static int g_meshFramesPerSecond = 30; // framse to render per period during animate
+static int g_subdivisionLevel = 0;
+static float g_meshTime = 0.0;
+static float g_meshSpeed = 0.001;
 //
 shared_ptr<Material> g_overridingMaterial;
 
@@ -185,6 +188,61 @@ static void makeScaledSphere(double scale) {
 }
 
 //lab9
+static void subdivision(Mesh *mesh_) {
+	const int subdivisionLevel = g_subdivisionLevel;
+	for (int i = 0; i < subdivisionLevel; i++) {
+		//Set faceVertex
+		const int numFace = mesh_->getNumFaces();
+		for (int j = 0; j < numFace; j++) {
+			Mesh::Face tmpFace = mesh_->getFace(j);
+			const int numV = tmpFace.getNumVertices();
+			Cvec3 newPosition = Cvec3(0, 0, 0);
+			for (int k = 0; k < numV; k++) {
+				Mesh::Vertex tmpVertex = tmpFace.getVertex(k);
+				Cvec3 tmpPosition = tmpVertex.getPosition();
+				newPosition += tmpPosition;
+			}
+			assert(numV);
+			newPosition /= numV;
+			mesh_->setNewFaceVertex(tmpFace, newPosition);
+		}
+		//Set edgeVertex
+		const int numEdges = mesh_->getNumEdges();
+		for (int j = 0; j < numEdges; j++) {
+			Mesh::Edge tmpEdge = mesh_->getEdge(j);
+			Cvec3 newPosition = Cvec3(0, 0, 0);
+			newPosition += tmpEdge.getVertex(0).getPosition();
+			newPosition += tmpEdge.getVertex(1).getPosition();
+			newPosition += mesh_->getNewFaceVertex(tmpEdge.getFace(0));
+			newPosition += mesh_->getNewFaceVertex(tmpEdge.getFace(1));
+			newPosition /= 4;
+			mesh_->setNewEdgeVertex(tmpEdge, newPosition);
+		}
+		//Set vertex vertex
+		for (int j = 0; j < mesh_->getNumVertices(); j++) {
+			const Mesh::Vertex v = mesh_->getVertex(j);
+			Mesh::VertexIterator it(v.getIterator()), it0(it);
+			Cvec3 positionVF = Cvec3(0, 0, 0);
+			Cvec3 positionV = Cvec3(0, 0, 0);
+			Cvec3 newPosition = Cvec3(0, 0, 0);
+			int connectedV = 0;
+			do {
+				connectedV++;
+				Mesh::Face tmpF = it.getFace();
+				positionVF += mesh_->getNewFaceVertex(tmpF);
+				Mesh::Vertex tmpV = it.getVertex();
+				positionV += tmpV.getPosition();
+			} while (++it != it0);
+			assert(connectedV);
+			positionV /= (connectedV*connectedV);
+			positionVF /= (connectedV*connectedV);
+			newPosition = v.getPosition() * (connectedV - 2) / connectedV + positionV + positionVF;
+			mesh_->setNewVertexVertex(v, newPosition);
+		}
+		mesh_->subdivide();
+	}
+}
+
 //Set the vertex normal by smooth shadinf. no return value, change the mesh value.
 static void smoothShading(Mesh *mesh_) {
 	for (int i = 0; i < mesh_->getNumVertices(); i++) {
@@ -229,26 +287,33 @@ static void makeMeshVertexPN(Mesh mesh_, vector<VertexPN> *vtx_, bool isSmooth) 
 // Interpret "ms" as milliseconds, Make Mesh Animation
 //Copy the mesh Class and scaled it, display
 static void meshTimerCallback(int ms) {
-	float t = (float)ms / (float)g_msPeriod * 2 * PI;
-	double meshScale = sin(t);
+	const float t = (g_meshTime + (1000 / g_meshFramesPerSecond) * g_meshSpeed);
+	g_meshTime = t;
 	Mesh scaledMesh = Mesh(mesh);
 	const bool isSmooth = g_smooth;
-	for (int i = 0; i < scaledMesh.getNumVertices(); i++) {
+	vector<VertexPN> vtx;
+	
+	//Scale the value
+	const int numV = scaledMesh.getNumVertices();
+	for (int i = 0; i < numV; i++) {
 		const Mesh::Vertex v = scaledMesh.getVertex(i);
 		Cvec3 scaledPosition = v.getPosition();
-		scaledPosition *= (meshScale*abs(sin(i)*10) / 8.0 + 0.5);
-		//cout <<i <<": "<< scaledPosition[0] << " " << scaledPosition[1] << " " << scaledPosition[2] << " " << endl;
+		//float meshConstant = i % 2 ? 1 == sin((double)i): cos((double)i);
+		double meshScale = abs(sin(t + (double)i*0.2));
+		scaledPosition *= (meshScale+0.3);
 		v.setPosition(scaledPosition);
 	}
+	//Subdivision
+	subdivision(&scaledMesh);
 	if(isSmooth)
-		smoothShading(&scaledMesh);
-	vector<VertexPN> vtx;
-	makeMeshVertexPN(scaledMesh, &vtx,isSmooth);
+		smoothShading(&scaledMesh);//smoothShading if needed
+	
+	makeMeshVertexPN(scaledMesh, &vtx,isSmooth);//make vector of Vertex PN
 	g_mesh->upload(&vtx[0], vtx.size());
 	glutPostRedisplay();
 	glutTimerFunc(1000 / g_meshFramesPerSecond,
 		meshTimerCallback,
-		ms + 1000 / g_meshFramesPerSecond);
+		0);
 }
 
 //Load Mesh File using load
@@ -1044,6 +1109,30 @@ static void keyboard(const unsigned char key, const int x, const int y) {
 		break;
 	case 'f':
 		g_smooth = !g_smooth;
+		break;
+	case 56:
+		if (g_meshSpeed <FLT_MAX / 2)
+			g_meshSpeed *= 2;
+		else
+			printf("Max Speed, It's over the max size of type float \n");
+		printf("mesh animation speed %f\n", g_meshSpeed);
+		break;
+	case 55:
+		g_meshSpeed /= 2;
+		printf("mesh animation speed %f\n", g_meshSpeed);
+		break;
+	case 57:
+		if (g_subdivisionLevel > 0)
+			g_subdivisionLevel--;
+		printf("Subdivision Level %d\n", g_subdivisionLevel);
+		break;
+	case 48:
+		if (g_subdivisionLevel < 6)
+			g_subdivisionLevel++;
+		printf("Subdivision Level %d\n", g_subdivisionLevel);
+		break;
+	default:
+		cout << key << endl;
 	}
 	
 	glutPostRedisplay();
